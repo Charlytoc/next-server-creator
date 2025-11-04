@@ -5,6 +5,9 @@ import { NextResponse } from "next/server";
 export async function POST(request: Request) {
  const { email } = await request.json();
 
+ console.log(handleUserSignup, typeof handleUserSignup, "handleUserSignup");
+ 
+
  // Executes asynchronously and doesn't block your app
  await start(handleUserSignup, [email]);
 
