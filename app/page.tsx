@@ -69,7 +69,7 @@ export default function Home() {
     const sessionId = crypto.randomUUID();
     setAgentSessionId(sessionId);
     setAgentMessages([]);
-    setAgentLoading(true);
+    setAgentLoading(false);
 
     try {
       const response = await fetch("/api/test-agent", {
@@ -86,7 +86,7 @@ export default function Home() {
       }
     } catch (error) {
       console.error("Error starting agent:", error);
-      setAgentLoading(false);
+      setAgentSessionId("");
     }
   };
 
