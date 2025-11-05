@@ -12,11 +12,13 @@
     "@google-cloud/storage": "^7.17.3",
     "axios": "^1.13.2",
     "next": "16.0.1",
+    "openai": "^6.8.1",
     "pusher": "^5.2.0",
     "pusher-js": "^8.4.0",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "server-only": "^0.0.1",
+    "vercel": "^48.8.2",
     "workflow": "^4.0.1-beta.7"
   },
   "devDependencies": {
