@@ -1,3 +1,4 @@
+import "server-only";
 import { start } from "workflow/api";
 import { createTutorial } from "@/workflows/create-tutorial-workflow";
 import { NextResponse } from "next/server";
