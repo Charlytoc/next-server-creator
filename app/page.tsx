@@ -26,6 +26,8 @@ export default function Home() {
   const [tutorialNotifications, setTutorialNotifications] = useState<Notification[]>([]);
 
   useEffect(() => {
+    if (!courseSlug) return;
+
     const pusherKey = process.env.NEXT_PUBLIC_PUSHER_KEY || "609743b48b8ed073d67f";
     const pusherCluster = process.env.NEXT_PUBLIC_PUSHER_CLUSTER || "us2";
 
@@ -35,24 +37,22 @@ export default function Home() {
       cluster: pusherCluster,
     });
 
-    const subscribeToChannel = (channelName: string) => {
-      const channel = pusher.subscribe(channelName);
-      channel.bind("tutorial-creation", (data: any) => {
-        setTutorialNotifications((prev) => [
-          {
-            ...data,
-            timestamp: new Date(),
-          },
-          ...prev,
-        ].slice(0, 20));
-      });
-    };
+    const channelName = `tutorial-${courseSlug}`;
+    const channel = pusher.subscribe(channelName);
 
-    if (courseSlug) {
-      subscribeToChannel(`tutorial-${courseSlug}`);
-    }
+    channel.bind("tutorial-creation", (data: any) => {
+      setTutorialNotifications((prev) => [
+        {
+          ...data,
+          timestamp: new Date(),
+        },
+        ...prev,
+      ].slice(0, 20));
+    });
 
     return () => {
+      channel.unbind_all();
+      channel.unsubscribe();
       pusher.disconnect();
     };
   }, [courseSlug]);

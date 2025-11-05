@@ -1,42 +1,97 @@
-import "server-only";
 import { FatalError } from "workflow";
-import Pusher from "pusher";
 import { Syllabus } from "@/types/tutorial";
-import { createLearnJson } from "@/utils/learnJson";
-import { createRigoPackage } from "@/utils/rigo";
-import { getBucket, uploadFileToBucket } from "@/utils/storage";
-import { createInitialSidebar } from "@/utils/sidebar";
-import { slugify } from "@/utils/slugify";
-import { getReadmeExtension } from "@/utils/readmeUtils";
 
-const getPusher = () => {
-  return new Pusher({
-    appId: process.env.PUSHER_APP_ID || "2073209",
-    key: process.env.PUSHER_KEY || "609743b48b8ed073d67f",
-    secret: process.env.PUSHER_SECRET || "ae0ae03cf538441a9679",
-    cluster: process.env.PUSHER_CLUSTER || "us2",
-    useTLS: true,
-  });
-};
+function getBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_APP_URL) {
+    return process.env.NEXT_PUBLIC_APP_URL;
+  }
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+  return "http://localhost:3000";
+}
 
-const sendNotification = async (
+function slugify(text: string): string {
+  return text
+    .toString()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036F]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^\d\s._a-z-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function getReadmeExtension(language: string): string {
+  return language === "en" || language === "us" ? ".md" : `.${language}.md`;
+}
+
+function createLearnJson(courseInfo: Syllabus["courseInfo"]) {
+  const expectedPreviewUrl = `https://${courseInfo.slug}.learn-pack.com/preview.png`;
+  const language = courseInfo.language || "en";
+
+  return {
+    slug: courseInfo.slug,
+    title: {
+      [language]: courseInfo.title,
+    },
+    technologies: courseInfo.technologies || [],
+    difficulty: "beginner",
+    description: {
+      [language]: courseInfo.description,
+    },
+    grading: "isolated",
+    telemetry: {
+      batch: "https://breathecode.herokuapp.com/v1/assignment/me/telemetry",
+    },
+    preview: expectedPreviewUrl,
+  };
+}
+
+function createInitialSidebar(slugs: string[], initialLanguage: string) {
+  const sidebar: Record<string, Record<string, string>> = {};
+  for (const slug of slugs) {
+    sidebar[slug] = {
+      [initialLanguage]: slug,
+    };
+  }
+  return sidebar;
+}
+
+async function sendNotification(
   courseSlug: string,
   type: string,
   message: string,
   lesson?: string,
   status?: string
-) => {
-  const pusher = getPusher();
-  const channel = `tutorial-${courseSlug}`;
+) {
+  "use step";
 
-  await pusher.trigger(channel, "tutorial-creation", {
-    type,
-    message,
-    lesson,
-    status,
-    courseSlug,
+  const response = await fetch(`${getBaseUrl()}/api/internal/notify`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      channel: `tutorial-${courseSlug}`,
+      event: "tutorial-creation",
+      data: {
+        type,
+        message,
+        lesson,
+        status,
+        courseSlug,
+      },
+    }),
   });
-};
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(`Failed to send notification: ${error.details || error.error}`);
+  }
+}
 
 export async function createTutorial(
   syllabus: Syllabus,
@@ -68,7 +123,7 @@ export async function createTutorial(
     `Rigo package created for ${courseSlug}`
   );
 
-  await uploadLearnJsonStep(courseSlug, learnJson);
+  await uploadFileStep(courseSlug, "learn.json", JSON.stringify(learnJson));
   await sendNotification(
     courseSlug,
     "learn_json_uploaded",
@@ -83,14 +138,36 @@ export async function createTutorial(
   );
 
   const sidebar = await createSidebarStep(syllabus);
-  await uploadSidebarStep(courseSlug, sidebar);
+  await uploadFileStep(
+    courseSlug,
+    ".learn/sidebar.json",
+    JSON.stringify(sidebar)
+  );
   await sendNotification(
     courseSlug,
     "sidebar_created",
     `Sidebar.json created and uploaded for ${courseSlug}`
   );
 
-  await uploadInitialSyllabusStep(courseSlug, syllabus);
+  const initialSyllabus = {
+    ...syllabus,
+    lessons: syllabus.lessons.map((lesson, index) => {
+      if (index < 1) {
+        return { ...lesson, generated: false, status: "GENERATING" };
+      }
+      return {
+        ...lesson,
+        generated: false,
+        status: "PENDING",
+      };
+    }),
+  };
+
+  await uploadFileStep(
+    courseSlug,
+    ".learn/initialSyllabus.json",
+    JSON.stringify(initialSyllabus)
+  );
   await sendNotification(
     courseSlug,
     "syllabus_uploaded",
@@ -113,7 +190,6 @@ export async function createTutorial(
 
 async function createLearnJsonStep(courseInfo: Syllabus["courseInfo"]) {
   "use step";
-
   return createLearnJson(courseInfo);
 }
 
@@ -124,30 +200,49 @@ async function createRigoPackageStep(
 ) {
   "use step";
 
-  try {
-    await createRigoPackage(rigoToken, courseSlug, learnJson);
-  } catch (error) {
+  const response = await fetch(`${getBaseUrl()}/api/internal/rigo`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      token: rigoToken,
+      slug: courseSlug,
+      config: learnJson,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
     throw new FatalError(
-      `Failed to create Rigo package: ${error instanceof Error ? error.message : "Unknown error"}`
+      `Failed to create Rigo package: ${error.details || error.error}`
     );
   }
 }
 
-async function uploadLearnJsonStep(courseSlug: string, learnJson: any) {
+async function uploadFileStep(
+  courseSlug: string,
+  relativePath: string,
+  content: string
+) {
   "use step";
 
-  try {
-    const bucket = getBucket();
-    const tutorialDir = `courses/${courseSlug}`;
-    await uploadFileToBucket(
-      bucket,
-      JSON.stringify(learnJson),
-      `${tutorialDir}/learn.json`
-    );
-  } catch (error) {
-    throw new Error(
-      `Failed to upload learn.json: ${error instanceof Error ? error.message : "Unknown error"}`
-    );
+  const fullPath = `courses/${courseSlug}/${relativePath}`;
+
+  const response = await fetch(`${getBaseUrl()}/api/internal/storage`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      path: fullPath,
+      content: content,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(`Failed to upload file: ${error.details || error.error}`);
   }
 }
 
@@ -157,32 +252,25 @@ async function createInitialReadmesStep(
 ) {
   "use step";
 
-  try {
-    const bucket = getBucket();
+  const language = syllabus.courseInfo.language || "en";
+  const readmeExtension = getReadmeExtension(language);
 
-    for (let i = 0; i < syllabus.lessons.length; i++) {
-      const lesson = syllabus.lessons[i];
-      const exSlug = slugify(lesson.id + "-" + lesson.title);
-      const targetDir = `${tutorialDir}/exercises/${exSlug}`;
+  for (let i = 0; i < syllabus.lessons.length; i++) {
+    const lesson = syllabus.lessons[i];
+    const exSlug = slugify(lesson.id + "-" + lesson.title);
+    const targetDir = `${tutorialDir}/exercises/${exSlug}`;
+    const readmeFilename = `README${readmeExtension}`;
 
-      const isGeneratingText = `
+    const isGeneratingText = `
   \`\`\`loader slug="${exSlug}"
   :rigo
   \`\`\`
       `;
-      const readmeFilename = `README${getReadmeExtension(
-        syllabus.courseInfo.language || "en"
-      )}`;
 
-      await uploadFileToBucket(
-        bucket,
-        isGeneratingText,
-        `${targetDir}/${readmeFilename}`
-      );
-    }
-  } catch (error) {
-    throw new Error(
-      `Failed to create initial readmes: ${error instanceof Error ? error.message : "Unknown error"}`
+    await uploadFileStep(
+      syllabus.courseInfo.slug,
+      `exercises/${exSlug}/${readmeFilename}`,
+      isGeneratingText
     );
   }
 }
@@ -193,64 +281,5 @@ async function createSidebarStep(syllabus: Syllabus) {
   const slugs = syllabus.lessons.map((lesson) =>
     slugify(lesson.id + "-" + lesson.title)
   );
-  return await createInitialSidebar(
-    slugs,
-    syllabus.courseInfo.language || "en"
-  );
+  return createInitialSidebar(slugs, syllabus.courseInfo.language || "en");
 }
-
-async function uploadSidebarStep(courseSlug: string, sidebar: any) {
-  "use step";
-
-  try {
-    const bucket = getBucket();
-    const tutorialDir = `courses/${courseSlug}`;
-    await uploadFileToBucket(
-      bucket,
-      JSON.stringify(sidebar),
-      `${tutorialDir}/.learn/sidebar.json`
-    );
-  } catch (error) {
-    throw new Error(
-      `Failed to upload sidebar: ${error instanceof Error ? error.message : "Unknown error"}`
-    );
-  }
-}
-
-async function uploadInitialSyllabusStep(
-  courseSlug: string,
-  syllabus: Syllabus
-) {
-  "use step";
-
-  try {
-    const bucket = getBucket();
-    const tutorialDir = `courses/${courseSlug}`;
-
-    const initialSyllabus = {
-      ...syllabus,
-      lessons: syllabus.lessons.map((lesson, index) => {
-        if (index < 1) {
-          return { ...lesson, generated: false, status: "GENERATING" };
-        }
-
-        return {
-          ...lesson,
-          generated: false,
-          status: "PENDING",
-        };
-      }),
-    };
-
-    await uploadFileToBucket(
-      bucket,
-      JSON.stringify(initialSyllabus),
-      `${tutorialDir}/.learn/initialSyllabus.json`
-    );
-  } catch (error) {
-    throw new Error(
-      `Failed to upload initial syllabus: ${error instanceof Error ? error.message : "Unknown error"}`
-    );
-  }
-}
-
