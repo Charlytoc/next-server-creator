@@ -16,6 +16,7 @@
     "pusher-js": "^8.4.0",
     "react": "19.2.0",
     "react-dom": "19.2.0",
+    "server-only": "^0.0.1",
     "workflow": "^4.0.1-beta.7"
   },
   "devDependencies": {

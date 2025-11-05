@@ -1,3 +1,4 @@
+import "server-only";
 import axios from "axios";
 import { FormState } from "@/types/tutorial";
 

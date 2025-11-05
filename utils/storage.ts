@@ -1,3 +1,4 @@
+import "server-only";
 import { Storage, Bucket } from "@google-cloud/storage";
 
 let storageInstance: Storage | null = null;

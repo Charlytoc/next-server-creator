@@ -1,3 +1,4 @@
+import "server-only";
 import { FatalError } from "workflow";
 import Pusher from "pusher";
 import { Syllabus } from "@/types/tutorial";
