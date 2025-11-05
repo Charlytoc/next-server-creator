@@ -9,6 +9,8 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@google-cloud/storage": "^7.17.3",
+    "axios": "^1.13.2",
     "next": "16.0.1",
     "pusher": "^5.2.0",
     "pusher-js": "^8.4.0",
