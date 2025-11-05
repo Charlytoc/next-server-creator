@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Pusher from "pusher-js";
+import SessionListener from "./components/SessionListener";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -121,7 +122,7 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black py-12">
-      <main className="flex flex-col items-center justify-center text-center px-16 max-w-4xl w-full">
+      <main className="flex flex-col items-center justify-center text-center px-16 max-w-6xl w-full">
         <h1 className="text-4xl font-semibold leading-tight tracking-tight text-black dark:text-zinc-50 mb-6">
           Test Agent
         </h1>
@@ -129,7 +130,8 @@ export default function Home() {
           Chat with an AI agent powered by OpenAI
         </p>
 
-        <div className="w-full">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 w-full">
+          <div className="w-full">
           {!agentSessionId ? (
             <button
               onClick={startAgent}
@@ -212,6 +214,9 @@ export default function Home() {
               </div>
             </div>
           )}
+          </div>
+
+          <SessionListener />
         </div>
       </main>
     </div>
