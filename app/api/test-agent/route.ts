@@ -28,7 +28,7 @@ export async function POST(request: Request) {
         sessionId,
       });
     }
-  } catch (error) {
+  } catch (error) {1
     console.error("Error in test-agent endpoint:", error);
     return NextResponse.json(
       {
